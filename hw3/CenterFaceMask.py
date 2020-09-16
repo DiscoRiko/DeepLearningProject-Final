@@ -29,13 +29,20 @@ class CenterFaceMask(nn.Module):
 
         # Getting the Center Points locations
         heat_map = features[:, 1027:, :, :]
-        flatten_heat_map = heat_map.view(features.shape[0], 10, -1)
-        center_points = torch.argmax(heat_map, dim=1)
+
+        center_points = self.get_center_points(heat_map)
 
         local_masks = self.extractLocalMasks(center_points, shape, size)
 
         # Getting final Mask
         final_mask = self.extractFinalMask(saliency, local_masks)
+
+    def get_center_points(self, heat_map):
+        flatten_heat_map = heat_map.view(heat_map.shape[0], 10, -1)
+        center_points = torch.argmax(flatten_heat_map, dim=2)
+        y = center_points / heat_map.shape[2]
+        x = center_points % heat_map.shape[2]
+
 
     def extractLocalMasks(self, center_points, shape, size):
         to_pil = T.ToPILImage()
