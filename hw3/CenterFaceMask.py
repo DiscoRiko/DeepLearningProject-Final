@@ -99,6 +99,7 @@ class CenterFaceMask(nn.Module):
             final_masks.append(final_mask)
         return final_masks
 
+
 def checking(saliency, center_point, mask):
         # Getting the size of the mask
         h = mask.shape[0]
@@ -140,3 +141,25 @@ def checking(saliency, center_point, mask):
 
         final_mask = cropped_mask * global_mask
         return final_mask
+
+
+def loss_size (all_sizes, center_points, actual_sizes):
+    """
+    all_sizes - 2x512x512 - h*w
+    center_points - list of 10 (x,y) tuples
+    actual_sizes - list of 10 (h,w) tuples
+    """
+    sizes_list = []
+    actual_sizes_list = []
+    loss = torch.nn.L1Loss(reduction="sum")
+
+    for actual_size, center_point in zip(actual_sizes, center_points):
+        if actual_size == (-1, -1):
+            continue
+        actual_sizes_list.append(torch.tensor(actual_size, dtype=torch.float32))
+        sizes_list.append(all_sizes[:, center_point[0], center_point[1]])
+
+    sizes_list = torch.stack(sizes_list, dim=1)
+    actual_sizes_list = torch.stack(actual_sizes_list, dim=1)
+
+    return loss(sizes_list, actual_sizes_list)/sizes_list.shape[1]
