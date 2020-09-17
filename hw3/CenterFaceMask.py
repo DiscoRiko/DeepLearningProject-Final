@@ -9,7 +9,7 @@ import torchvision.transforms as T
 
 
 class CenterFaceMask(nn.Module):
-    def __init__(self, indicators_recognizer, num_channels=1037):
+    def __init__(self, indicators_recognizer=None, num_channels=1037):
         super().__init__()
         self.extract_features = dla_up.dla34up(classes=num_channels).to('cuda')
         self.indicators_recognizer = indicators_recognizer
@@ -40,22 +40,40 @@ class CenterFaceMask(nn.Module):
     def get_center_points(self, heat_map):
         flatten_heat_map = heat_map.view(heat_map.shape[0], 10, -1)
         center_points = torch.argmax(flatten_heat_map, dim=2)
+        # We start from top left of the image - right is x-axis down is y-axis
         y = center_points / heat_map.shape[2]
         x = center_points % heat_map.shape[2]
 
+        center_points = []
+        for item1, item2 in zip(x, y):
+            pic_center_points = []
+            for i1, i2 in zip(item1, item2):
+                pic_center_points.append((i1.item(), i2.item()))
+            center_points.append(pic_center_points)
+        return center_points
 
     def extractLocalMasks(self, center_points, shape, size):
+        """
+        center_points = list of list of tuples - (x, y) - Nx10
+        shape - Nx(32*32)xHxW
+        size - Nx2xHxW
+        """
+        organs = ["l_brow", "r_brow", "l_eye", "r_eye", "l_ear", "r_ear", "l_lip", "u_lip", "mouth", "nose"]
         to_pil = T.ToPILImage()
         to_tensor = T.ToTensor()
-        local_masks = []
-        for point in center_points:
-            vector = shape[0, :, point[0], point[1]]
-            vector = vector.reshape(32, 32)
 
-            resize_temp = T.Resize((size[0, 0, point[0], point[1]], size[0, 1, point[0], point[1]]))
-            mask = to_tensor(resize_temp(to_pil(vector)))
-            print(f"mask shape:{mask.shape}")
-            local_masks.append((point, mask))
+        local_masks = []
+        for pic_center_points, pic_shape, pic_size in zip(center_points, shape, size):
+            pic_local_masks = dict()
+            for point, organ in zip(pic_center_points, organs):
+                shape_vec = pic_shape[:, point[1], point[0]]
+                shape_vec = shape_vec.reshape(32, 32)
+
+                resize_temp = T.Resize((pic_size[0, point[1], point[0]], pic_size[1, point[1], point[0]]))
+                mask = to_tensor(resize_temp(to_pil(shape_vec)))
+                print(f"mask shape:{mask.shape}")
+                pic_local_masks.update({'center_point_'+organ: point, 'mask_'+organ: mask})
+            local_masks.append(pic_local_masks)
         return local_masks
 
     def extractFinalMask(self, saliency, local_masks):
