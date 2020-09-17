@@ -242,20 +242,9 @@ class IndicatorTrainer(Trainer):
         loss.backward()
         self.optimizer.step()
 
-        # We can make the number as a hyper parameter
-        #print(f"ind_pred shape of train_batch:{ind_pred.shape}")
-        #print(f"ind_pred of train_batch:{ind_pred}")
-        #print(f"indicators shape of train_batch:{indicators.shape}")
-        #print(f"indicators of train_batch:{indicators}")
-        #print(f"if is bigger than of train_batch:{(abs(indicators - ind_pred) <= 0.25)}")
-
         num_correct = (abs(indicators - ind_pred) <= 0.05).sum()
         # ========================
 
-        # Note: scaling num_correct by seq_len because each sample has seq_len
-        # different predictions.
-        #print(f"num_correct of train_batch:{num_correct.item() / classes}")
-        #print(f"loss of train_batch:{loss.item()}")
         return BatchResult(loss.item(), num_correct.item() / classes)
 
     def test_batch(self, batch) -> BatchResult:
@@ -275,7 +264,6 @@ class IndicatorTrainer(Trainer):
 
             loss = self.loss_fn(ind_pred, indicators)
 
-            # We can make the number as a hyper parameter
             num_correct = (abs(indicators - ind_pred) <= 0.05).sum()
             # ========================
         return BatchResult(loss.item(), num_correct.item() / classes)

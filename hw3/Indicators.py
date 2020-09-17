@@ -1,5 +1,5 @@
 import torch.nn as nn
-import torch
+import torchvision
 
 
 class Indicators(nn.Module):
@@ -42,4 +42,20 @@ def indicator_loss(scores, actual_indicators):
     #print(f"loss:{loss}")
     return loss.sum()
 
+
+class IndicatorsResNet50(nn.Module):
+    def __init__(self, out_channels):
+        super().__init__()
+
+        self.resnet = torchvision.models.resnet50(pretrained=False, progress=False)
+
+        self.thousand_to_ten = nn.Sequential(
+            nn.Linear(in_features=1000, out_features=100),
+            nn.Linear(in_features=100, out_features=out_channels)
+        )
+
+    def forward(self, x):
+        res_res = self.resnet(x)
+        class_scores = self.thousand_to_ten(res_res)
+        return class_scores
 
