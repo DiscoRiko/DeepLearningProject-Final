@@ -136,26 +136,32 @@ class CenterFaceMask(nn.Module):
         return final_masks
 
 
-def loss_size (all_sizes, center_points, actual_sizes):
+def loss_size(all_sizes, center_points, actual_sizes):
     """
-    all_sizes - 2x512x512 - h*w
-    center_points - list of 10 (x,y) tuples
-    actual_sizes - list of 10 (h,w) tuples
+    all_sizes - Nx2x512x512 - h*w
+    center_points - list of list of tuples - (x, y) - Nx10
+    actual_sizes - list of list of 10 (h,w) tuples
     """
-    sizes_list = []
-    actual_sizes_list = []
-    loss = torch.nn.L1Loss(reduction="sum")
+    loss_fn = torch.nn.L1Loss(reduction="sum")
+    total_loss = 0
+    for pic_num in range(all_sizes.shape[0]):
+        pic_sizes_list = []
+        pic_actual_sizes_list = []
+        for actual_size, center_point in zip(actual_sizes[pic_num], center_points[pic_num]):
+            if actual_size == (-1, -1):
+                pic_actual_sizes_list.append(torch.zeros((1, 2)))
+            else:
+                pic_actual_sizes_list.append(torch.tensor(actual_size, dtype=torch.float32))
+            pic_sizes_list.append(all_sizes[pic_num, :, center_point[1], center_point[0]])
+        pic_actual_sizes_list = torch.stack(pic_actual_sizes_list, dim=1)
+        pic_sizes_list = torch.stack(pic_sizes_list, dim=1)
+        pic_sizes_list = pic_sizes_list.to(dtype=torch.float32)
 
-    for actual_size, center_point in zip(actual_sizes, center_points):
-        if actual_size == (-1, -1):
-            continue
-        actual_sizes_list.append(torch.tensor(actual_size, dtype=torch.float32))
-        sizes_list.append(all_sizes[:, center_point[0], center_point[1]])
+        loss = loss_fn(pic_sizes_list, pic_actual_sizes_list) / pic_sizes_list.shape[1]
+        total_loss += loss
 
-    sizes_list = torch.stack(sizes_list, dim=1)
-    actual_sizes_list = torch.stack(actual_sizes_list, dim=1)
+    return total_loss/all_sizes.shape[0]
 
-    return loss(sizes_list, actual_sizes_list)/sizes_list.shape[1]
 
 #def checking(saliency, center_point, mask):
 #        # Getting the size of the mask
