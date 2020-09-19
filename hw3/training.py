@@ -215,12 +215,12 @@ class Trainer(abc.ABC):
         return EpochResult(losses=losses, accuracy=accuracy)
 
 
-class IndicatorTrainer(Trainer):
+class CenterFaceMaskTrainer(Trainer):
     def __init__(self, model, loss_fn, optimizer, device=None):
         super().__init__(model, loss_fn, optimizer, device)
 
     def train_batch(self, batch) -> BatchResult:
-        images, indicators = batch['image'], batch['indicators']
+        images, indicators, sizes_centers, masks = batch['image'], batch['indicators'], batch['sizes_centers'], batch['masks']
         images = images.to(self.device, dtype=torch.float)  # (N,3,H,W)
         indicators = indicators.to(self.device, dtype=torch.float)  # (N,1,C)
         classes = indicators.shape[2]
@@ -235,6 +235,8 @@ class IndicatorTrainer(Trainer):
         # ====== YOUR CODE: ======
         ind_pred = self.model(images)
 
+        # TODO we need to make functions that return the input for all the loss functions -
+        #  possible to do this with the data loader
         loss = self.loss_fn(ind_pred, indicators)
 
         self.optimizer.zero_grad()

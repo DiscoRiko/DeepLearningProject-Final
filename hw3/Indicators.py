@@ -28,18 +28,12 @@ class Indicators(nn.Module):
         features = features.view(features.size(0), -1)
         class_scores = self.classifier(features)
         class_scores = class_scores.view(-1, 1, 10)
-        #print(f"class_scores:{class_scores}")
         return class_scores
 
 
 # N*C
 def indicator_loss(scores, actual_indicators):
-    #print(f"scores shape:{scores.shape}")
-    #print(f"scores type:{scores.dtype}")
-    #print(f"actual_indicators shape:{actual_indicators.shape}")
-    #print(f"actual_indicators type:{actual_indicators.dtype}")
     loss = abs(actual_indicators - scores)
-    #print(f"loss:{loss}")
     return loss.sum()
 
 

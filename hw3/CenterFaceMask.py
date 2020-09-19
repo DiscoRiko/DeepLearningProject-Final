@@ -17,27 +17,46 @@ class CenterFaceMask(nn.Module):
     def forward(self, x):
         # Getting the backbone output
         features, _ = self.extract_features(x)
-        print(f"features shape is: {features.shape}")
+
         # Getting all the heads by slicing the features
-        # Getting the General Mask
-        # (N, C, H, W)
+
+        # Getting the General Mask - Nx1xH,xW
         saliency = features[:, :1, :, :]
 
-        # Getting the Local Masks
+        # Getting the shape - (Nx32*32xHxW)
         shape = features[:, 1:1025, :, :]
+
+        # Getting the size after converting to int and abs - Nx2xHxW
         size = abs(torch.tensor(features[:, 1025:1027, :, :], dtype=torch.int))
 
-        # Getting the Center Points locations
+        # Getting the heatmap - Nx10xHxW
         heat_map = features[:, 1027:, :, :]
 
+        # Getting the Center Points locations
         center_points = self.get_center_points(heat_map)
 
-        local_masks = self.extractLocalMasks(center_points, shape, size)
+        # Getting the local masks
+        local_masks = self.extract_local_masks(center_points, shape, size)
 
-        # Getting final Mask
-        final_mask = self.extractFinalMask(saliency, local_masks)
+        # Getting the final masks
+        final_masks = self.extract_final_masks(saliency, local_masks)
+
+        # Getting all the input that we need for the loss functions
+        # TODO
+        #  1.   loss_size(all_sizes, center_points, actual_sizes) - We have: all_sizes (size) and center_points.
+        #       We need to build function that return actual_sizes
+        #  2.   loss_center_points(center_points, actual_center_points): - We have: center_points.
+        #       We need to build function that return actual_center_points
+        #  3.   loss_masks(final_masks, actual_final_masks): - We have: final_masks.
+        #       We need to build function that return actual_final_masks
+        return size, center_points, final_masks
 
     def get_center_points(self, heat_map):
+        """
+        heatmap - Nx10xHxW
+        getting indices of max arg in each channel
+        return - list of lists of tuples - (x, y) - Nx10
+        """
         flatten_heat_map = heat_map.view(heat_map.shape[0], 10, -1)
         center_points = torch.argmax(flatten_heat_map, dim=2)
         # We start from top left of the image - right is x-axis down is y-axis
@@ -57,6 +76,7 @@ class CenterFaceMask(nn.Module):
         center_points - list of list of tuples - (x, y) - Nx10
         shape - Nx(32*32)xHxW
         size - Nx2xHxW
+        return - list of dict {organ: (center_point, local_mask)}
         """
         organs = ["l_brow", "r_brow", "l_eye", "r_eye", "l_ear", "r_ear", "l_lip", "u_lip", "mouth", "nose"]
         to_pil = T.ToPILImage()
@@ -71,15 +91,16 @@ class CenterFaceMask(nn.Module):
 
                 resize_temp = T.Resize((pic_size[0, point[1], point[0]], pic_size[1, point[1], point[0]]))
                 mask = to_tensor(resize_temp(to_pil(shape_vec)))
-                print(f"mask shape:{mask.shape}")
+
                 pic_local_masks.update({organ: (point, mask.view((mask.shape[1], mask.shape[2])))})
             local_masks.append(pic_local_masks)
         return local_masks
 
-    def extract_final_mask(self, saliency, local_masks):
+    def extract_final_masks(self, saliency, local_masks):
         """
         saliency - Nx1xHxW
-        local_masks - list of N local masks dictionaries
+        local_masks - list of N local masks dict {organ: (center_point, local_mask)}
+        return - list of N local masks dict {organ: (final_mask, indices_for_cropping)}
         """
         final_masks = []
         pic_num = 0
@@ -130,7 +151,7 @@ class CenterFaceMask(nn.Module):
                 # Getting the final mask
                 final_mask = cropped_local_mask * cropped_global_mask
                 indices_for_cropping = (global_row_1, global_row_2, global_col_1, global_col_2)
-                pic_final_masks.update({organ: (center_point, final_mask, indices_for_cropping)})
+                pic_final_masks.update({organ: (final_mask, indices_for_cropping)})
             pic_num += 1
             final_masks.append(pic_final_masks)
 
@@ -186,12 +207,11 @@ def loss_center_points(center_points, actual_center_points):
     return loss/pic_center_points_list.shape[0]
 
 
-# TODO If in the end we won't use the center points - we need to delete them (also from extract_final_masks)
 # TODO We need to remember that the final masks values are not between zero to one
 def loss_masks(final_masks, actual_final_masks):
     """
-    final masks - list of N dictionaries: {organ: (center_point, final_mask, indices_for_cropping)}
-    actual_final_masks - list of N dictionaries: {organ: (center_point, actual_final_mask)} - for organs that not exists, we will enter zero like tensor - and the masks will be 2d
+    final masks - list of N dictionaries: {organ: (final_mask, indices_for_cropping)}
+    actual_final_masks - list of N dictionaries: {organ: (actual_final_mask)} - for organs that not exists, we will enter zero like tensor - and the masks will be 2d
     """
     loss_fn = nn.BCEWithLogitsLoss()
     final_masks_list = []
@@ -223,45 +243,3 @@ def loss_masks(final_masks, actual_final_masks):
         total_loss += loss_fn(final_mask, cropped_actual_final_mask)
 
     return total_loss/masks_amount
-
-#def checking(saliency, center_point, mask):
-#        # Getting the size of the mask
-#        h = mask.shape[0]
-#        w = mask.shape[1]
-#        # Getting the global mask
-#        row_1 = center_point[0] - (h//2)
-#        row_2 = row_1 + h - 1
-#        col_1 = center_point[1] - (w // 2)
-#        col_2 = col_1 + w - 1
-#
-#        diff_row_1 = 0
-#        diff_row_2 = h + 1
-#        local_diff_col_1 = 0
-#        diff_col_2 = w + 1
-#
-#        if (row_1 < 0):
-#            diff_row_1 = (0 - row_1)
-#            row_1 = 0
-#        if (row_2 > 7):
-#            diff_row_2 = h - (row_2 - 7)
-#            row_2 = 7
-#        if (col_1 < 0):
-#            local_diff_col_1 = (0 - col_1)
-#            col_1 = 0
-#        if (col_2 > 7):
-#            diff_col_2 = w - (col_2 - 7)
-#            col_2 = 7
-#        global_mask = saliency[0, 0, row_1:(row_2+1), col_1:(col_2+1)]
-#
-#        print(f"global mask shape: {global_mask.shape}")
-#        print(f"global mask: {global_mask}")
-#        global_mask = global_mask.reshape(row_2 - row_1 + 1, col_2 - col_1 + 1)
-#        cropped_mask = mask[diff_row_1:diff_row_2, local_diff_col_1:diff_col_2]
-#        print(f"cropped mask shape: {cropped_mask.shape}")
-#        print(f"cropped mask: {cropped_mask}")
-#        #sig = torch.nn.Sigmoid()
-#        #cropped_mask = sig(cropped_mask)
-#        # Getting the final mask
-#
-#        final_mask = cropped_mask * global_mask
-#        return final_mask
