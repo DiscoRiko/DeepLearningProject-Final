@@ -129,7 +129,8 @@ class CenterFaceMask(nn.Module):
 
                 # Getting the final mask
                 final_mask = cropped_local_mask * cropped_global_mask
-                pic_final_masks.update({organ: (center_point, final_mask)})
+                indices_for_cropping = (global_row_1, global_row_2, global_col_1, global_col_2)
+                pic_final_masks.update({organ: (center_point, final_mask, indices_for_cropping)})
             pic_num += 1
             final_masks.append(pic_final_masks)
 
@@ -184,11 +185,44 @@ def loss_center_points(center_points, actual_center_points):
     loss = loss_fn(pic_center_points_list, pic_actual_center_points_list)
     return loss/pic_center_points_list.shape[0]
 
+
+# TODO If in the end we won't use the center points - we need to delete them (also from extract_final_masks)
+# TODO We need to remember that the final masks values are not between zero to one
 def loss_masks(final_masks, actual_final_masks):
     """
-    final masks - list of N dictionaries: {organ: (center_point, final_mask)}
-    actual_final_masks - list of N dictionaries: {organ: (center_point, actual_final_mask)} - the masks will be cropped
+    final masks - list of N dictionaries: {organ: (center_point, final_mask, indices_for_cropping)}
+    actual_final_masks - list of N dictionaries: {organ: (center_point, actual_final_mask)} - for organs that not exists, we will enter zero like tensor - and the masks will be 2d
     """
+    loss_fn = nn.BCEWithLogitsLoss()
+    final_masks_list = []
+    indices_for_cropping_list = []
+    actual_final_masks_list = []
+    cropped_actual_final_masks_list = []
+
+    # extraction final mask and indices from the dict
+    for final_mask_dict in final_masks:
+        for organ, data in final_mask_dict.items():
+            final_mask, indices_for_cropping = data
+            final_masks_list.append(final_mask)
+            indices_for_cropping_list.append(indices_for_cropping)
+
+    # extraction actual final mask from the dict
+    for actual_final_masks_dict in actual_final_masks:
+        for organ, data in actual_final_masks_dict.items():
+            actual_final_mask = data
+            actual_final_masks_list.append(actual_final_mask)
+
+    # crop the actual final masks
+    for indices_for_cropping, actual_final_mask in zip(indices_for_cropping_list, actual_final_masks_list):
+        r1, r2, c1, c2 = indices_for_cropping
+        cropped_actual_final_masks_list.append(actual_final_mask[r1:r2, c1:c2])
+
+    total_loss = 0
+    masks_amount = len(final_masks_list)
+    for final_mask, cropped_actual_final_mask in zip(final_masks_list, cropped_actual_final_masks_list):
+        total_loss += loss_fn(final_mask, cropped_actual_final_mask)
+
+    return total_loss/masks_amount
 
 #def checking(saliency, center_point, mask):
 #        # Getting the size of the mask
