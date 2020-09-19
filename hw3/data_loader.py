@@ -4,7 +4,7 @@ import os
 from skimage import io
 from torch.utils.data import Dataset
 import matplotlib.pyplot as plt
-
+import torchvision.transforms as T
 
 class CelebA(Dataset):
     def __init__(self, images_path, att_csv_file, masks_path, size_center_csv_file, transform=None):
@@ -47,7 +47,7 @@ class CelebA(Dataset):
 
             masks.update({key: org_mask})
 
-        sample = {'image': image, 'indicators': indicators}#, 'sizes_centers': sizes_centers, 'masks': masks}
+        sample = {'image': image, 'indicators': indicators, 'sizes_centers': sizes_centers, 'masks': masks}
 
         if self.transform:
             sample = self.transform(sample)
@@ -55,21 +55,30 @@ class CelebA(Dataset):
         return sample
 
 
-class ToTensor(object):
+class ToTensorSmaller(object):
     """Convert ndarrays in sample to Tensors."""
 
     def __call__(self, sample):
-        #image, indicators, sizes_centers, masks = sample['image'], sample['indicators'], sample['sizes_centers'], sample['masks']
-        image, indicators = sample['image'], sample['indicators']
+        image, indicators, sizes_centers, masks = sample['image'], sample['indicators'], sample['sizes_centers'], sample['masks']
+        #image, indicators = sample['image'], sample['indicators']
+        tf = T.Compose([
+            # Pil image
+            T.ToPILImage(),
+            # Resize to constant spatial dimensions
+            T.Resize((512, 512)),
+            # PIL.Image -> torch.Tensor
+            T.ToTensor(),
+        ])
 
         # swap color axis because
         # numpy image: H x W x C
         # torch image: C X H X W
-        image = image.transpose((2, 0, 1))
-        return {'image': torch.from_numpy(image),
-                'indicators': indicators}#,
-                #'sizes_centers': sizes_centers,
-                #'masks': masks}
+        image = tf(image)
+
+        return {'image': image,
+                'indicators': indicators,
+                'sizes_centers': sizes_centers,
+                'masks': masks}
 
 
 def print_image_details(index, dataset: CelebA):
@@ -77,10 +86,10 @@ def print_image_details(index, dataset: CelebA):
     print(f"image {index}:")
     print(f"indicator shape:\n{sample['indicators'].shape}")
     print(f"indicators:\n{sample['indicators']}")
-    #print(f"sizes_centers:\n{sample['sizes_centers']}")
+    print(f"sizes_centers:\n{sample['sizes_centers']}")
     print(f"image shape:\n{sample['image'].shape}")
     plt.imshow(sample['image'])
     plt.show()
-    #for key, data in sample['masks'].items():
-    #    plt.imshow(data)
-    #    plt.show()
+    for key, data in sample['masks'].items():
+        plt.imshow(data)
+        plt.show()

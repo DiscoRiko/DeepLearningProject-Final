@@ -184,6 +184,12 @@ def loss_center_points(center_points, actual_center_points):
     loss = loss_fn(pic_center_points_list, pic_actual_center_points_list)
     return loss/pic_center_points_list.shape[0]
 
+def loss_masks(final_masks, actual_final_masks):
+    """
+    final masks - list of N dictionaries: {organ: (center_point, final_mask)}
+    actual_final_masks - list of N dictionaries: {organ: (center_point, actual_final_mask)} - the masks will be cropped
+    """
+
 #def checking(saliency, center_point, mask):
 #        # Getting the size of the mask
 #        h = mask.shape[0]
