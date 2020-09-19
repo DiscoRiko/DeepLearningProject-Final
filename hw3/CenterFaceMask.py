@@ -160,8 +160,29 @@ def loss_size(all_sizes, center_points, actual_sizes):
         loss = loss_fn(pic_sizes_list, pic_actual_sizes_list) / pic_sizes_list.shape[1]
         total_loss += loss
 
-    return total_loss/all_sizes.shape[0]
+    return (total_loss/all_sizes.shape[0]).item()
 
+
+def loss_center_points(center_points, actual_center_points):
+    """
+    center_points - list of list of tuples - (x, y) - Nx10
+    actual_center_points - list of list of tuples - (x, y) - Nx10
+    """
+    loss_fn = torch.nn.L1Loss(reduction="mean")
+    pic_center_points_list = []
+    pic_actual_center_points_list = []
+    for center_point, actual_center_point in zip(center_points, actual_center_points):
+        for xy in center_point:
+            pic_center_points_list.append(torch.tensor(xy, dtype=torch.float32))
+
+        for actual_xy in actual_center_point:
+            pic_actual_center_points_list.append(torch.tensor(actual_xy, dtype=torch.float32))
+
+    pic_center_points_list = torch.stack(pic_center_points_list)
+    pic_actual_center_points_list = torch.stack(pic_actual_center_points_list)
+
+    loss = loss_fn(pic_center_points_list, pic_actual_center_points_list)
+    return loss/pic_center_points_list.shape[0]
 
 #def checking(saliency, center_point, mask):
 #        # Getting the size of the mask
