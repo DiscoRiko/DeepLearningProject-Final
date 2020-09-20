@@ -19,6 +19,8 @@ class CelebA(Dataset):
         return len(self.size_center_frame)
 
     def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.item()
         img_name = os.path.join(self.images_path, str(self.size_center_frame.iloc[idx, 0])+'.jpg')
 
         image = io.imread(img_name)
