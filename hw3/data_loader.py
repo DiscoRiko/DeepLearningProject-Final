@@ -3,30 +3,28 @@ import torch
 import os
 from skimage import io
 from torch.utils.data import Dataset
-import matplotlib.pyplot as plt
 import torchvision.transforms as T
 
+
 class CelebA(Dataset):
-    def __init__(self, images_path, att_csv_file, masks_path, size_center_csv_file, transform=None):
-        self.indicators_frame = pd.read_csv(att_csv_file)
+    def __init__(self, images_path, #att_csv_file,
+                 masks_path, size_center_csv_file, transform=None):
+        #self.indicators_frame = pd.read_csv(att_csv_file)
         self.images_path = images_path
         self.masks_path = masks_path
         self.size_center_frame = pd.read_csv(size_center_csv_file)
         self.transform = transform
 
     def __len__(self):
-        return len(self.indicators_frame)
+        return len(self.size_center_frame)
 
     def __getitem__(self, idx):
-        #if torch.is_tensor(idx):
-        #    idx = idx.tolist()
-
-        img_name = os.path.join(self.images_path, self.indicators_frame.iloc[idx, 0])
+        img_name = os.path.join(self.images_path, str(self.size_center_frame.iloc[idx, 0])+'.jpg')
 
         image = io.imread(img_name)
 
-        indicators = self.indicators_frame.iloc[idx, 1:]
-        indicators = torch.tensor([indicators])
+        #indicators = self.indicators_frame.iloc[idx, 1:]
+        #indicators = torch.tensor([indicators])
 
         sizes_centers = self.size_center_frame.iloc[idx, 1:]
         sizes_centers = dict(sizes_centers)
@@ -58,7 +56,8 @@ class CelebA(Dataset):
 
                 masks.update({key: org_mask})
 
-        sample = {'image': image, 'indicators': indicators, 'sizes': sizes, 'centers': centers, 'masks': masks}
+        sample = {'image': image, #'indicators': indicators,
+                  'sizes': sizes, 'centers': centers, 'masks': masks}
 
         if self.transform:
             sample = self.transform(sample)
@@ -70,8 +69,10 @@ class ToTensorSmaller(object):
     """Convert ndarrays in sample to Tensors."""
 
     def __call__(self, sample):
-        image, indicators, sizes, centers, masks = sample['image'], sample['indicators'], sample['sizes'], sample['centers'], sample['masks']
+        #image, indicators, sizes, centers, masks = sample['image'], sample['indicators'], sample['sizes'], sample['centers'], sample['masks']
         #image, indicators = sample['image'], sample['indicators']
+        image, sizes, centers, masks = sample['image'], sample['sizes'], sample['centers'], sample['masks']
+
         tf = T.Compose([
             # Pil image
             T.ToPILImage(),
@@ -87,7 +88,7 @@ class ToTensorSmaller(object):
         image = tf(image)
 
         return {'image': image,
-                'indicators': indicators,
+                #'indicators': indicators,
                 'sizes': sizes,
                 'centers': centers,
                 'masks': masks}
@@ -96,8 +97,8 @@ class ToTensorSmaller(object):
 def print_image_details(index, dataset: CelebA):
     sample = dataset[index]
     print(f"index {index}:")
-    print(f"indicator shape:\n{sample['indicators'].shape}")
-    print(f"indicators:\n{sample['indicators']}")
+    #print(f"indicator shape:\n{sample['indicators'].shape}")
+    #print(f"indicators:\n{sample['indicators']}")
     print(f"sizes:\n{sample['sizes']}")
     print(f"centers:\n{sample['centers']}")
     print(f"image shape:\n{sample['image'].shape}")

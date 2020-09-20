@@ -11,9 +11,10 @@ from .cs236781.train_results import BatchResult, EpochResult, FitResult
 
 
 class Trainer(abc.ABC):
-    def __init__(self, model, loss_fn, optimizer, device='cpu'):
+    def __init__(self, model, loss_fn, lambdas, optimizer, device='cpu'):
         self.model = model
         self.loss_fn = loss_fn
+        self.lambdas = lambdas
         self.optimizer = optimizer
         self.device = device
         model.to(self.device)
@@ -221,9 +222,10 @@ class CenterFaceMaskTrainer(Trainer):
         super().__init__(model, loss_fn, lambdas, optimizer, device)
 
     def train_batch(self, batch) -> BatchResult:
-        images, indicators, actual_sizes, actual_center_points, actual_final_masks = batch['image'], batch['indicators'], batch['sizes'], batch['centers'], batch['masks']
+        #images, indicators, actual_sizes, actual_center_points, actual_final_masks = batch['image'], batch['indicators'], batch['sizes'], batch['centers'], batch['masks']
+        images, actual_sizes, actual_center_points, actual_final_masks = batch['image'], batch['sizes'], batch['centers'], batch['masks']
         images = images.to(self.device, dtype=torch.float)  # (N,3,H,W)
-        indicators = indicators.to(self.device, dtype=torch.float)  # (N,1,C)
+        #indicators = indicators.to(self.device, dtype=torch.float)  # (N,1,C)
         #classes = indicators.shape[2]
 
         # TODO:
@@ -249,9 +251,10 @@ class CenterFaceMaskTrainer(Trainer):
         return BatchResult(loss.item(), batch_acc)
 
     def test_batch(self, batch) -> BatchResult:
-        images, indicators, actual_sizes, actual_center_points, actual_final_masks = batch['image'], batch['indicators'], batch['sizes'], batch['centers'], batch['masks']
+        #images, indicators, actual_sizes, actual_center_points, actual_final_masks = batch['image'], batch['indicators'], batch['sizes'], batch['centers'], batch['masks']
+        images, actual_sizes, actual_center_points, actual_final_masks = batch['image'], batch['sizes'], batch['centers'], batch['masks']
         images = images.to(self.device, dtype=torch.float)  # (N,3,H,W)
-        indicators = indicators.to(self.device, dtype=torch.float)  # (N,1,C)
+        #indicators = indicators.to(self.device, dtype=torch.float)  # (N,1,C)
         #classes = indicators.shape[2]
 
         with torch.no_grad():

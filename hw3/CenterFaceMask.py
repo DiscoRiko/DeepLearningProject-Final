@@ -3,16 +3,11 @@ from torch import nn
 from . import dla_up
 import torchvision.transforms as T
 
-# organs = ["l_brow", "r_brow", "l_eye", "r_eye", "l_ear", "r_ear", "l_lip", "u_lip", "mouth", "nose"]
-# Date:11.9.20 - Here we will use the indicators to see which parts are in the photo (indicators_recognizer)
-# We need to make a script that gets the center point of each face part
-
 
 class CenterFaceMask(nn.Module):
-    def __init__(self, indicators_recognizer=None, num_channels=1037):
+    def __init__(self, num_channels=1037):
         super().__init__()
-        self.extract_features = dla_up.dla34up(classes=num_channels).to('cuda')
-        self.indicators_recognizer = indicators_recognizer
+        self.extract_features = dla_up.dla34up(classes=num_channels)#.to('cuda')
 
     def forward(self, x):
         # Getting the backbone output
@@ -205,7 +200,7 @@ def loss_masks(final_masks, actual_final_masks):
     final masks - list of N dictionaries: {organ: (final_mask, indices_for_cropping)}
     actual_final_masks - list of N dictionaries: {organ: (actual_final_mask)}
     """
-    loss_fn = nn.BCEWithLogitsLoss()
+    loss_bce = nn.BCEWithLogitsLoss()
     final_masks_list = []
     indices_for_cropping_list = []
     actual_final_masks_list = []
@@ -232,7 +227,7 @@ def loss_masks(final_masks, actual_final_masks):
     total_loss = 0
     masks_amount = len(final_masks_list)
     for final_mask, cropped_actual_final_mask in zip(final_masks_list, cropped_actual_final_masks_list):
-        total_loss += loss_fn(final_mask, cropped_actual_final_mask)
+        total_loss += loss_bce(final_mask, cropped_actual_final_mask)
 
     return total_loss/masks_amount
 
