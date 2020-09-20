@@ -7,7 +7,7 @@ class BatchResult(NamedTuple):
     and number of correct classifications.
     """
     loss: float
-    num_correct: int
+    acc: float
 
 
 class EpochResult(NamedTuple):

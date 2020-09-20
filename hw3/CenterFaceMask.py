@@ -41,14 +41,6 @@ class CenterFaceMask(nn.Module):
         # Getting the final masks
         final_masks = self.extract_final_masks(saliency, local_masks)
 
-        # Getting all the input that we need for the loss functions
-        # TODO
-        #  1.   loss_size(all_sizes, center_points, actual_sizes) - We have: all_sizes (size) and center_points.
-        #       We need to build function that return actual_sizes
-        #  2.   loss_center_points(center_points, actual_center_points): - We have: center_points.
-        #       We need to build function that return actual_center_points
-        #  3.   loss_masks(final_masks, actual_final_masks): - We have: final_masks.
-        #       We need to build function that return actual_final_masks
         return size, center_points, final_masks
 
     def get_center_points(self, heat_map):
@@ -158,7 +150,7 @@ class CenterFaceMask(nn.Module):
         return final_masks
 
 
-def loss_size(all_sizes, center_points, actual_sizes):
+def loss_size(sizes, center_points, actual_sizes):
     """
     all_sizes - Nx2x512x512 - h*w
     center_points - list of list of tuples - (x, y) - Nx10
@@ -166,7 +158,7 @@ def loss_size(all_sizes, center_points, actual_sizes):
     """
     loss_fn = torch.nn.L1Loss(reduction="sum")
     total_loss = 0
-    for pic_num in range(all_sizes.shape[0]):
+    for pic_num in range(sizes.shape[0]):
         pic_sizes_list = []
         pic_actual_sizes_list = []
         for actual_size, center_point in zip(actual_sizes[pic_num], center_points[pic_num]):
@@ -174,7 +166,7 @@ def loss_size(all_sizes, center_points, actual_sizes):
                 pic_actual_sizes_list.append(torch.zeros((1, 2)))
             else:
                 pic_actual_sizes_list.append(torch.tensor(actual_size, dtype=torch.float32))
-            pic_sizes_list.append(all_sizes[pic_num, :, center_point[1], center_point[0]])
+            pic_sizes_list.append(sizes[pic_num, :, center_point[1], center_point[0]])
         pic_actual_sizes_list = torch.stack(pic_actual_sizes_list, dim=1)
         pic_sizes_list = torch.stack(pic_sizes_list, dim=1)
         pic_sizes_list = pic_sizes_list.to(dtype=torch.float32)
@@ -182,7 +174,7 @@ def loss_size(all_sizes, center_points, actual_sizes):
         loss = loss_fn(pic_sizes_list, pic_actual_sizes_list) / pic_sizes_list.shape[1]
         total_loss += loss
 
-    return (total_loss/all_sizes.shape[0]).item()
+    return (total_loss/sizes.shape[0]).item()
 
 
 def loss_center_points(center_points, actual_center_points):
@@ -211,7 +203,7 @@ def loss_center_points(center_points, actual_center_points):
 def loss_masks(final_masks, actual_final_masks):
     """
     final masks - list of N dictionaries: {organ: (final_mask, indices_for_cropping)}
-    actual_final_masks - list of N dictionaries: {organ: (actual_final_mask)} - for organs that not exists, we will enter zero like tensor - and the masks will be 2d
+    actual_final_masks - list of N dictionaries: {organ: (actual_final_mask)}
     """
     loss_fn = nn.BCEWithLogitsLoss()
     final_masks_list = []
@@ -243,3 +235,10 @@ def loss_masks(final_masks, actual_final_masks):
         total_loss += loss_fn(final_mask, cropped_actual_final_mask)
 
     return total_loss/masks_amount
+
+
+def loss_fn(sizes, actual_sizes, center_points, actual_center_points, final_masks, actual_final_masks, lambdas):
+    ls = lambdas[0]*loss_size(sizes, center_points, actual_sizes)
+    lcp = lambdas[1]*loss_center_points(center_points, actual_center_points)
+    lm = lambdas[2]*loss_masks(final_masks, actual_final_masks)
+    return ls+lcp+lm

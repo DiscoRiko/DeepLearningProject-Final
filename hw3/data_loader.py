@@ -32,22 +32,33 @@ class CelebA(Dataset):
         sizes_centers = dict(sizes_centers)
         masks = dict()
 
+        sizes = []
+        centers = []
+        tt = T.ToTensor()
         for key, data in sizes_centers.items():
             data = data.split('~')
-            hwxy = dict({"h": float(data[0]), "w": float(data[1]), "x": float(data[2]), "y": float(data[3])})
-            sizes_centers.update({key: hwxy})
+            hw = (data[0], data[1])
+            xy = (data[2], data[3])
+            sizes.append(hw)
+            centers.append(xy)
+            #hwxy = dict({"h": float(data[0]), "w": float(data[1]), "x": float(data[2]), "y": float(data[3])})
+            #sizes_centers.update({key: hwxy})
 
             if data[0] == "-1":
-                continue
+                org_mask = torch.zeros((512, 512))
 
-            mask_name = str(self.size_center_frame.iloc[idx, 0]).zfill(5) + "_" + key + ".png"
-            org_mask_name = os.path.join(self.masks_path, mask_name)
+                masks.update({key: org_mask})
+            else:
+                mask_name = str(self.size_center_frame.iloc[idx, 0]).zfill(5) + "_" + key + ".png"
+                org_mask_name = os.path.join(self.masks_path, mask_name)
 
-            org_mask = io.imread(org_mask_name)
+                org_mask = io.imread(org_mask_name)
+                org_mask = tt(org_mask)
+                org_mask = org_mask[0]
 
-            masks.update({key: org_mask})
+                masks.update({key: org_mask})
 
-        sample = {'image': image, 'indicators': indicators, 'sizes_centers': sizes_centers, 'masks': masks}
+        sample = {'image': image, 'indicators': indicators, 'sizes': sizes, 'centers': centers, 'masks': masks}
 
         if self.transform:
             sample = self.transform(sample)
@@ -59,7 +70,7 @@ class ToTensorSmaller(object):
     """Convert ndarrays in sample to Tensors."""
 
     def __call__(self, sample):
-        image, indicators, sizes_centers, masks = sample['image'], sample['indicators'], sample['sizes_centers'], sample['masks']
+        image, indicators, sizes, centers, masks = sample['image'], sample['indicators'], sample['sizes'], sample['centers'], sample['masks']
         #image, indicators = sample['image'], sample['indicators']
         tf = T.Compose([
             # Pil image
@@ -77,19 +88,21 @@ class ToTensorSmaller(object):
 
         return {'image': image,
                 'indicators': indicators,
-                'sizes_centers': sizes_centers,
+                'sizes': sizes,
+                'centers': centers,
                 'masks': masks}
 
 
 def print_image_details(index, dataset: CelebA):
     sample = dataset[index]
-    print(f"image {index}:")
+    print(f"index {index}:")
     print(f"indicator shape:\n{sample['indicators'].shape}")
     print(f"indicators:\n{sample['indicators']}")
-    print(f"sizes_centers:\n{sample['sizes_centers']}")
+    print(f"sizes:\n{sample['sizes']}")
+    print(f"centers:\n{sample['centers']}")
     print(f"image shape:\n{sample['image'].shape}")
-    plt.imshow(sample['image'])
-    plt.show()
+    print(f"image:\n{sample['image']}")
     for key, data in sample['masks'].items():
-        plt.imshow(data)
-        plt.show()
+        print(f"data shape:\n{data.shape}")
+        print(f"data:\n{data}")
+

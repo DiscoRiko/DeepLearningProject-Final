@@ -176,14 +176,14 @@ class Trainer(abc.ABC):
         dataloader, and prints progress along the way.
         """
         losses = []
-        num_correct = 0
-        num_samples = len(dl.sampler)
+        batch_acc = 0
+        #num_samples = len(dl.sampler)
         num_batches = len(dl.batch_sampler)
 
         if max_batches is not None:
             if max_batches < num_batches:
                 num_batches = max_batches
-                num_samples = num_batches * dl.batch_size
+                #num_samples = num_batches * dl.batch_size
 
         if verbose:
             pbar_file = sys.stdout
@@ -202,12 +202,13 @@ class Trainer(abc.ABC):
                 pbar.update()
 
                 losses.append(batch_res.loss)
-                num_correct += batch_res.num_correct
+                batch_acc += batch_res.batch_acc
 
             avg_loss = sum(losses) / num_batches
             #print(f"num_correct after epoch:{num_correct}")
             #print(f"num_samples after epoch:{num_samples}")
-            accuracy = 100. * num_correct / num_samples
+            #accuracy = 100. * num_correct / num_samples
+            accuracy = 100. * batch_acc / num_batches
             pbar.set_description(f'{pbar_name} '
                                  f'(Avg. Loss {avg_loss:.3f}, '
                                  f'Accuracy {accuracy:.1f})')
@@ -216,14 +217,14 @@ class Trainer(abc.ABC):
 
 
 class CenterFaceMaskTrainer(Trainer):
-    def __init__(self, model, loss_fn, optimizer, device=None):
-        super().__init__(model, loss_fn, optimizer, device)
+    def __init__(self, model, loss_fn, lambdas, optimizer, device=None):
+        super().__init__(model, loss_fn, lambdas, optimizer, device)
 
     def train_batch(self, batch) -> BatchResult:
-        images, indicators, sizes_centers, masks = batch['image'], batch['indicators'], batch['sizes_centers'], batch['masks']
+        images, indicators, actual_sizes, actual_center_points, actual_final_masks = batch['image'], batch['indicators'], batch['sizes'], batch['centers'], batch['masks']
         images = images.to(self.device, dtype=torch.float)  # (N,3,H,W)
         indicators = indicators.to(self.device, dtype=torch.float)  # (N,1,C)
-        classes = indicators.shape[2]
+        #classes = indicators.shape[2]
 
         # TODO:
         #  Train the RNN model on one batch of data.
@@ -233,27 +234,25 @@ class CenterFaceMaskTrainer(Trainer):
         #  - Update params
         #  - Calculate number of correct char predictions
         # ====== YOUR CODE: ======
-        ind_pred = self.model(images)
+        sizes, center_points, final_masks = self.model(images)
 
-        # TODO we need to make functions that return the input for all the loss functions -
-        #  possible to do this with the data loader
-        loss = self.loss_fn(ind_pred, indicators)
+        loss = self.loss_fn(sizes, actual_sizes, center_points, actual_center_points, final_masks, actual_final_masks, self.lambdas)
 
         self.optimizer.zero_grad()
 
         loss.backward()
         self.optimizer.step()
 
-        num_correct = (abs(indicators - ind_pred) <= 0.05).sum()
+        batch_acc = get_acc(final_masks, actual_final_masks)
         # ========================
 
-        return BatchResult(loss.item(), num_correct.item() / classes)
+        return BatchResult(loss.item(), batch_acc)
 
     def test_batch(self, batch) -> BatchResult:
-        images, indicators = batch['image'], batch['indicators']
+        images, indicators, actual_sizes, actual_center_points, actual_final_masks = batch['image'], batch['indicators'], batch['sizes'], batch['centers'], batch['masks']
         images = images.to(self.device, dtype=torch.float)  # (N,3,H,W)
         indicators = indicators.to(self.device, dtype=torch.float)  # (N,1,C)
-        classes = indicators.shape[2]
+        #classes = indicators.shape[2]
 
         with torch.no_grad():
             # TODO:
@@ -262,11 +261,51 @@ class CenterFaceMaskTrainer(Trainer):
             #  - Loss calculation
             #  - Calculate number of correct predictions
             # ====== YOUR CODE: ======
-            ind_pred = self.model(images)
+            sizes, center_points, final_masks = self.model(images)
 
-            loss = self.loss_fn(ind_pred, indicators)
+            loss = self.loss_fn(sizes, actual_sizes, center_points, actual_center_points, final_masks, actual_final_masks, self.lambdas)
 
-            num_correct = (abs(indicators - ind_pred) <= 0.05).sum()
+            batch_acc = get_acc(final_masks, actual_final_masks)
             # ========================
-        return BatchResult(loss.item(), num_correct.item() / classes)
+        return BatchResult(loss.item(), batch_acc)
 
+
+def get_acc(final_masks, actual_final_masks):
+    """
+    final masks - list of N dictionaries: {organ: (final_mask, indices_for_cropping)}
+    actual_final_masks - list of N dictionaries: {organ: (actual_final_mask)}
+    """
+    final_masks_list = []
+    indices_for_cropping_list = []
+    actual_final_masks_list = []
+    full_final_masks_list = []
+
+    # extraction final mask and indices from the dict
+    for final_mask_dict in final_masks:
+        for organ, data in final_mask_dict.items():
+            final_mask, indices_for_cropping = data
+            final_masks_list.append(final_mask)
+            indices_for_cropping_list.append(indices_for_cropping)
+
+    # extraction actual final mask from the dict
+    for actual_final_masks_dict in actual_final_masks:
+        for organ, data in actual_final_masks_dict.items():
+            actual_final_mask = data
+            actual_final_masks_list.append(actual_final_mask)
+
+    # crop the actual final masks
+    for indices_for_cropping, final_mask in zip(indices_for_cropping_list, final_masks_list):
+        full_final_mask = torch.zeros((512, 512))
+        r1, r2, c1, c2 = indices_for_cropping
+        full_final_mask[r1:r2, c1:c2] = final_mask
+        full_final_masks_list.append(full_final_mask)
+
+    actual_final_masks = torch.stack(actual_final_masks_list)
+    full_final_masks = torch.stack(full_final_masks_list)
+    sig = torch.nn.Sigmoid()
+    full_final_masks = sig(full_final_masks)
+    full_final_masks = full_final_masks > 0.9
+    full_final_masks = full_final_masks.to(dtype=torch.float32)
+
+    acc = (actual_final_masks == full_final_masks).to(dtype=torch.float32).mean()
+    return acc
